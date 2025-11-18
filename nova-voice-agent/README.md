@@ -4,7 +4,7 @@ An AI-powered voice agent that handles phone calls, books appointments, sends SM
 
 ## 📞 Quick Test
 
-Call: **+1 (814) 568-5796** (after setup)
+Call: **+1 (814) 568-5796** (after setup) or  (866)652-9337
 
 ## 🚀 Quick Start (15 minutes)
 
