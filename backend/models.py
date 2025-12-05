@@ -25,3 +25,4 @@ class ConversationState(BaseModel):
     messages: list[Message] = []
     call_data: CallData = CallData()
     stage: str = "greeting"
+    language: str = "en"  # 'en' or 'es'

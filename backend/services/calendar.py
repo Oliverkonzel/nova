@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import CAL_API_KEY, CAL_EVENT_TYPE
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # Event Type ID for free-consultation
 EVENT_TYPE_ID = 3871645
@@ -15,7 +16,10 @@ EVENT_TYPE_ID = 3871645
 async def get_available_slots(days_ahead: int = 7) -> list[dict]:
     """Get available time slots from Cal.com"""
     try:
-        start_date = datetime.now().date()
+        # Get current time in Eastern timezone
+        eastern = ZoneInfo("America/New_York")
+        now_et = datetime.now(eastern)
+        start_date = now_et.date()
         end_date = start_date + timedelta(days=days_ahead)
 
         url = f"https://api.cal.com/v2/slots/available"
@@ -35,13 +39,18 @@ async def get_available_slots(days_ahead: int = 7) -> list[dict]:
             if "data" in data and "slots" in data["data"]:
                 for date, times in data["data"]["slots"].items():
                     for slot in times:
-                        time_obj = datetime.fromisoformat(slot["time"].replace('Z', '+00:00'))
-                        # Convert to Eastern Time
-                        local_time = time_obj.strftime("%I:%M %p")
+                        # Parse UTC time and convert to Eastern Time
+                        time_obj_utc = datetime.fromisoformat(slot["time"].replace('Z', '+00:00'))
+                        time_obj_et = time_obj_utc.astimezone(eastern)
+
+                        # Format for display in ET
+                        local_time = time_obj_et.strftime("%I:%M %p")
+                        local_date = time_obj_et.strftime("%Y-%m-%d")
+
                         slots.append({
-                            "date": date,
+                            "date": local_date,
                             "time": local_time,
-                            "datetime": slot["time"]
+                            "datetime": slot["time"]  # Keep original UTC for booking
                         })
 
             print(f"Found {len(slots)} available slots")
@@ -49,11 +58,29 @@ async def get_available_slots(days_ahead: int = 7) -> list[dict]:
 
     except Exception as e:
         print(f"Error getting slots: {e}")
-        # Return default slots for testing
-        tomorrow = (datetime.now() + timedelta(days=1)).date()
+        # Return default slots for testing in Eastern Time
+        eastern = ZoneInfo("America/New_York")
+        tomorrow_et = datetime.now(eastern) + timedelta(days=1)
+
+        # Create slots at 10 AM and 2 PM ET
+        slot1_et = tomorrow_et.replace(hour=10, minute=0, second=0, microsecond=0)
+        slot2_et = tomorrow_et.replace(hour=14, minute=0, second=0, microsecond=0)
+
+        # Convert to UTC for the datetime field
+        slot1_utc = slot1_et.astimezone(ZoneInfo("UTC"))
+        slot2_utc = slot2_et.astimezone(ZoneInfo("UTC"))
+
         return [
-            {"date": str(tomorrow), "time": "10:00 AM", "datetime": f"{tomorrow}T14:00:00.000Z"},
-            {"date": str(tomorrow), "time": "2:00 PM", "datetime": f"{tomorrow}T18:00:00.000Z"},
+            {
+                "date": slot1_et.strftime("%Y-%m-%d"),
+                "time": "10:00 AM",
+                "datetime": slot1_utc.isoformat().replace('+00:00', 'Z')
+            },
+            {
+                "date": slot2_et.strftime("%Y-%m-%d"),
+                "time": "2:00 PM",
+                "datetime": slot2_utc.isoformat().replace('+00:00', 'Z')
+            },
         ]
 
 async def book_appointment(name: str, email: str, phone: str, datetime_slot: str) -> dict:
@@ -69,11 +96,11 @@ async def book_appointment(name: str, email: str, phone: str, datetime_slot: str
 
         booking_data = {
             "eventTypeId": EVENT_TYPE_ID,
-            "start": datetime_slot,
+            "start": datetime_slot,  # UTC time from slot selection
             "attendee": {
                 "name": name,
                 "email": email,
-                "timeZone": "America/New_York",
+                "timeZone": "America/New_York",  # Eastern Time
                 "language": "en"
             },
             "metadata": {"source": "nova-voice-agent", "phone": phone}

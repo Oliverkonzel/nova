@@ -8,7 +8,7 @@ import os
 import traceback
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.conversation import generate_response, get_conversation, end_conversation
+from services.conversation import generate_response, get_conversation, end_conversation, detect_language
 from services.calendar import get_available_slots, book_appointment, format_slots_for_speech
 from services.sms import send_confirmation_sms
 from services.crm import create_lead
@@ -22,27 +22,31 @@ async def handle_incoming_call(CallSid: str = Form(...)):
 
     try:
         response = VoiceResponse()
+        # Set language hints to support both English and Spanish
         gather = Gather(
             input='speech',
             action='/webhooks/voice/process',
             speechTimeout='auto',
-            language='en-US'
+            language='en-US',
+            hints='hola, hello, buenos días, ayuda, help, español, spanish',
+            speech_model='experimental_conversations'
         )
 
+        # Use Google's more natural neural voice
         gather.say(
-            "Hi! This is Nova from Orbyn A I. Thanks for calling! How can I help you today?",
-            voice='Polly.Joanna'
+            "Hey there! This is Nova from Orbyn AI. How can I help you today?",
+            voice='Google.en-US-Neural2-F'
         )
 
         response.append(gather)
-        response.say("I didn't hear anything. Please call back when you're ready. Goodbye!")
+        response.say("I didn't hear anything. Please call back when you're ready. Goodbye!", voice='Google.en-US-Neural2-F')
 
         return Response(content=str(response), media_type="application/xml")
     except Exception as e:
         print(f"Error in incoming call: {e}")
         traceback.print_exc()
         response = VoiceResponse()
-        response.say("Sorry, there was an error. Please try again later.", voice='Polly.Joanna')
+        response.say("Sorry, there was an error. Please try again later.", voice='Google.en-US-Neural2-F')
         return Response(content=str(response), media_type="application/xml")
 
 @router.post("/voice/process")
@@ -57,17 +61,26 @@ async def process_speech(
     try:
         if not SpeechResult:
             response = VoiceResponse()
-            response.say("I didn't catch that. Could you repeat?", voice='Polly.Joanna')
+            response.say("Sorry, I didn't catch that. Could you say that again?", voice='Google.en-US-Neural2-F')
             response.redirect('/webhooks/voice/incoming')
             return Response(content=str(response), media_type="application/xml")
 
-        # Generate AI response
-        ai_response, extracted_data = generate_response(CallSid, SpeechResult)
+        # Detect language from user's speech
+        detected_lang = detect_language(SpeechResult)
+        print(f"Detected language: {detected_lang}")
+
+        # Generate AI response with detected language
+        ai_response, extracted_data = generate_response(CallSid, SpeechResult, detected_lang)
 
         print(f"Nova says: {ai_response}")
         print(f"Extracted: {extracted_data}")
 
         conversation = get_conversation(CallSid)
+
+        # Get language settings with more natural neural voices
+        lang_code = 'es-MX' if conversation.language == 'es' else 'en-US'
+        voice = 'Google.es-US-Neural2-A' if conversation.language == 'es' else 'Google.en-US-Neural2-F'
+        fallback_message = "¿Sigues ahí?" if conversation.language == 'es' else "Hello? You still there?"
 
         # Check if ready to book
         if (conversation.call_data.name and
@@ -84,9 +97,10 @@ async def process_speech(
                 input='speech',
                 action='/webhooks/voice/book',
                 speechTimeout='auto',
-                language='en-US'
+                language=lang_code,
+                speech_model='experimental_conversations'
             )
-            gather.say(f"{ai_response} {slots_speech}", voice='Polly.Joanna')
+            gather.say(f"{ai_response} {slots_speech}", voice=voice)
             response.append(gather)
 
             return Response(content=str(response), media_type="application/xml")
@@ -97,12 +111,13 @@ async def process_speech(
             input='speech',
             action='/webhooks/voice/process',
             speechTimeout='auto',
-            language='en-US'
+            language=lang_code,
+            speech_model='experimental_conversations'
         )
-        gather.say(ai_response, voice='Polly.Joanna')
+        gather.say(ai_response, voice=voice)
         response.append(gather)
 
-        response.say("Are you still there?", voice='Polly.Joanna')
+        response.say(fallback_message, voice=voice)
         response.redirect('/webhooks/voice/process')
 
         return Response(content=str(response), media_type="application/xml")
@@ -111,7 +126,7 @@ async def process_speech(
         print(f"Error in process_speech: {e}")
         traceback.print_exc()
         response = VoiceResponse()
-        response.say("I'm having some technical difficulties. Let me have someone call you back. Goodbye!", voice='Polly.Joanna')
+        response.say("Oops, I'm having a little tech issue. Let me have someone call you back. Thanks!", voice='Google.en-US-Neural2-F')
         return Response(content=str(response), media_type="application/xml")
 
 @router.post("/voice/book")
@@ -121,6 +136,10 @@ async def book_slot(CallSid: str = Form(...), SpeechResult: str = Form(None)):
 
     try:
         conversation = get_conversation(CallSid)
+
+        # Get language settings with natural voices
+        voice = 'Google.es-US-Neural2-A' if conversation.language == 'es' else 'Google.en-US-Neural2-F'
+
         slots = await get_available_slots()
 
         if slots:
@@ -159,11 +178,18 @@ async def book_slot(CallSid: str = Form(...), SpeechResult: str = Form(None)):
                     print(f"Notion error (non-fatal): {notion_error}")
 
                 response = VoiceResponse()
-                response.say(
-                    f"Perfect! I've booked you for {selected_slot['date']} at {selected_slot['time']}. "
-                    f"I just sent a confirmation text. Looking forward to speaking with you! Goodbye!",
-                    voice='Polly.Joanna'
-                )
+                if conversation.language == 'es':
+                    response.say(
+                        f"¡Perfecto! Te reservé para el {selected_slot['date']} a las {selected_slot['time']}. "
+                        f"Te acabo de enviar un mensaje de confirmación. ¡Nos vemos pronto!",
+                        voice=voice
+                    )
+                else:
+                    response.say(
+                        f"Perfect! You're all set for {selected_slot['date']} at {selected_slot['time']}. "
+                        f"Just sent you a confirmation text. Talk to you soon!",
+                        voice=voice
+                    )
 
                 end_conversation(CallSid)
                 return Response(content=str(response), media_type="application/xml")
@@ -172,10 +198,16 @@ async def book_slot(CallSid: str = Form(...), SpeechResult: str = Form(None)):
 
         # Fallback
         response = VoiceResponse()
-        response.say(
-            "I'm having trouble booking right now. Let me have someone call you back. Goodbye!",
-            voice='Polly.Joanna'
-        )
+        if conversation.language == 'es':
+            response.say(
+                "Hmm, tengo un problema técnico. Déjame que alguien del equipo te llame de vuelta. ¡Gracias!",
+                voice=voice
+            )
+        else:
+            response.say(
+                "Hmm, I'm having a little tech issue. Let me have someone from the team call you back. Thanks!",
+                voice=voice
+            )
 
         conversation.call_data.status = "needs_callback"
         try:
@@ -189,7 +221,7 @@ async def book_slot(CallSid: str = Form(...), SpeechResult: str = Form(None)):
         print(f"Error in book_slot: {e}")
         traceback.print_exc()
         response = VoiceResponse()
-        response.say("I'm having technical difficulties. Let me have someone call you back. Goodbye!", voice='Polly.Joanna')
+        response.say("Oops, having a tech issue. Let me have someone call you back. Thanks!", voice='Google.en-US-Neural2-F')
         return Response(content=str(response), media_type="application/xml")
 
 @router.post("/voice/status")

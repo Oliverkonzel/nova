@@ -59,7 +59,13 @@ async def create_lead(call_data: CallData, call_sid: str) -> dict:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=data, headers=headers)
-            response.raise_for_status()
+
+            if response.status_code != 200:
+                error_detail = response.text
+                print(f"Notion API Error {response.status_code}:")
+                print(f"Response: {error_detail}")
+                return {"success": False, "error": error_detail}
+
             result = response.json()
 
             print(f"Notion lead created!")
@@ -69,6 +75,13 @@ async def create_lead(call_data: CallData, call_sid: str) -> dict:
                 "url": result.get("url")
             }
 
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.text if hasattr(e, 'response') else str(e)
+        print(f"Notion HTTP error: {e}")
+        print(f"Response body: {error_detail}")
+        return {"success": False, "error": error_detail}
     except Exception as e:
         print(f"Notion error: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
