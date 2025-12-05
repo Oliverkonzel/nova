@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import OPENAI_API_KEY, NOVA_SYSTEM_PROMPT
+from config import OPENAI_API_KEY, NOVA_SYSTEM_PROMPT_EN, NOVA_SYSTEM_PROMPT_ES
 from models import ConversationState, Message
 import json
 
@@ -22,41 +22,64 @@ def get_conversation(call_sid: str) -> ConversationState:
         active_conversations[call_sid] = ConversationState(call_sid=call_sid)
     return active_conversations[call_sid]
 
-def generate_response(call_sid: str, user_message: str) -> tuple[str, dict]:
+def detect_language(text: str) -> str:
+    """
+    Detect if the text is in Spanish or English
+    Returns: 'es' for Spanish, 'en' for English
+    """
+    # Common Spanish words and patterns
+    spanish_indicators = [
+        'hola', 'buenos', 'días', 'tardes', 'noches', 'gracias', 'por favor',
+        'sí', 'necesito', 'quiero', 'busco', 'ayuda', 'información',
+        'habla', 'español', 'puedo', 'estoy', 'tengo'
+    ]
+
+    text_lower = text.lower()
+    spanish_word_count = sum(1 for word in spanish_indicators if word in text_lower)
+
+    # If we find 2 or more Spanish indicators, it's likely Spanish
+    return 'es' if spanish_word_count >= 2 else 'en'
+
+def generate_response(call_sid: str, user_message: str, detected_language: str = None) -> tuple[str, dict]:
     """
     Generate Nova's response to what the user said
-    
+
     Returns:
         tuple: (Nova's response text, extracted data)
     """
     conversation = get_conversation(call_sid)
     conversation.messages.append(Message(role="user", content=user_message))
-    
+
+    # Detect language if provided
+    if detected_language:
+        conversation.language = detected_language
+
+    # Select the appropriate system prompt
+    system_prompt = NOVA_SYSTEM_PROMPT_ES if conversation.language == 'es' else NOVA_SYSTEM_PROMPT_EN
+
     # Build messages for OpenAI
-    messages = [{"role": "system", "content": NOVA_SYSTEM_PROMPT}]
-    
+    messages = [{"role": "system", "content": system_prompt}]
+
     for msg in conversation.messages:
         messages.append({"role": msg.role, "content": msg.content})
     
-    # Add extraction instructions
+    # Add extraction instructions - make it clearer this is AFTER the spoken response
     messages.append({
         "role": "system", 
-        "content": """After your response, output a JSON object with any extracted info:
-{
-  "name": "extracted name or null",
-  "phone": "extracted phone or null", 
-  "email": "extracted email or null",
-  "service": "extracted service or null",
-  "ready_to_book": true/false
-}"""
+        "content": """IMPORTANT: First, provide your conversational response to the user. Then, on a new line, output ONLY a JSON object (no additional text) with any extracted information:
+{"name": "value or null", "phone": "value or null", "email": "value or null", "service": "value or null", "ready_to_book": true/false}
+
+The JSON must come AFTER your spoken response and must not be part of what you say to the user."""
     })
     
-    # Call OpenAI
+    # Call OpenAI with settings optimized for natural conversation
     response = client.chat.completions.create(
         model="gpt-4",
         messages=messages,
-        temperature=0.7,
-        max_tokens=150
+        temperature=0.9,  # Higher temperature for more natural, varied responses
+        max_tokens=80,    # Shorter max to keep responses brief and punchy
+        presence_penalty=0.6,  # Encourage variety in word choice
+        frequency_penalty=0.3  # Reduce repetition
     )
     
     assistant_message = response.choices[0].message.content
