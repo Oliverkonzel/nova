@@ -77,6 +77,7 @@ Check your `.env` file - everything is already set up:
 - ✅ OpenAI (AI conversation)
 - ✅ Cal.com (scheduling)
 - ✅ Notion (CRM)
+- ✅ CRM Backend (optional - for external CRM integration)
 
 ## 🧪 Testing
 
@@ -128,4 +129,48 @@ lsof -ti:8000 | xargs kill -9
 ### No SMS received
 - Check phone number format: +1XXXXXXXXXX
 - Verify Twilio number is SMS-enabled
+
+## 🔗 CRM Backend Integration
+
+Nova can automatically send call data to your external CRM backend at the end of each call. This is optional and works alongside the existing Notion integration.
+
+### Setup
+
+Add this variable to your `.env` file:
+
+```bash
+# CRM Backend Integration (optional)
+CRM_BACKEND_URL=https://crm-backend-8b97.onrender.com
+CRM_TENANT_CODE=walmart
+```
+
+### How it works
+
+At the end of each call, Nova automatically sends contact data to your CRM backend:
+- **Endpoint**: `POST {CRM_BACKEND_URL}/public/submit-contact`
+- **Authentication**: None (public endpoint)
+- **Payload**: Minimal JSON contract required by the public endpoint
+
+Example payload:
+```json
+{
+  "name": "from nova",
+  "email": "from nova",
+  "phone": "from nova",
+  "tenant_code": "walmart"
+}
+```
+
+### Error Handling
+
+- Failed CRM pushes are logged but do not crash the call flow
+- Both successful and failed attempts are logged in console
+- If CRM backend is not configured, it's silently skipped
+
+### Testing
+
+Test your CRM backend integration:
+```bash
+python test_integrations.py
+```
 
