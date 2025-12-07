@@ -86,13 +86,18 @@ async def test_crm_backend():
         # Test pushing data to CRM backend
         print("\n1. Pushing test contact to CRM backend...")
 
+        from datetime import datetime, timedelta
+        
+        # Use a date 7 days in the future for more realistic test data
+        future_date = (datetime.now() + timedelta(days=7)).isoformat()
+        
         test_call_data = CallData(
             name="Test Contact - CRM Backend",
             phone="+15559876543",
             email="test.crm@example.com",
             service="CRM Integration Test",
             status="qualified",
-            appointment_time="2024-01-15T10:00:00",
+            appointment_time=future_date,
             notes="This is a test entry to verify CRM backend integration"
         )
 

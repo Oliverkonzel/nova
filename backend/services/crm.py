@@ -126,7 +126,7 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
             "phone": call_data.phone or "",
             "email": call_data.email or "",
             "service": call_data.service or "",
-            "status": call_data.status,
+            "status": call_data.status or "new",
             "notes": call_data.notes or "",
         }
         
@@ -142,20 +142,15 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()  # Raise exception for 4xx/5xx status codes
             
-            if response.status_code in [200, 201]:
-                print(f"✅ CRM backend: Contact created successfully")
-                result = response.json() if response.text else {}
-                return {
-                    "success": True,
-                    "contact_id": result.get("id"),
-                    "response": result
-                }
-            else:
-                error_detail = response.text
-                print(f"❌ CRM backend API Error {response.status_code}:")
-                print(f"Response: {error_detail}")
-                return {"success": False, "error": f"HTTP {response.status_code}: {error_detail}"}
+            print(f"✅ CRM backend: Contact created successfully")
+            result = response.json() if response.text else {}
+            return {
+                "success": True,
+                "contact_id": result.get("id"),
+                "response": result
+            }
                 
     except httpx.TimeoutException as e:
         error_msg = f"CRM backend request timeout: {str(e)}"
