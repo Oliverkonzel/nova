@@ -157,7 +157,7 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
         print(f"❌ {error_msg}")
         return {"success": False, "error": error_msg}
     except httpx.HTTPStatusError as e:
-        error_detail = e.response.text if hasattr(e, 'response') else str(e)
+        error_detail = e.response.text
         print(f"❌ CRM backend HTTP error: {e}")
         print(f"Response body: {error_detail}")
         return {"success": False, "error": error_detail}
