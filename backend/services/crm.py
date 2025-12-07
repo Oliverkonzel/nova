@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL, CRM_BACKEND_URL, CRM_BACKEND_TOKEN
+from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL, CRM_BACKEND_URL, CRM_TENANT_CODE
 from models import CallData
 from datetime import datetime
 
@@ -88,82 +88,69 @@ async def create_lead(call_data: CallData, call_sid: str) -> dict:
 
 async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict:
     """
-    Push contact/call data to CRM backend API.
-    
-    Posts to the CRM backend's /contacts/ endpoint with call data in JSON format.
-    Maps CallData fields to CRM ContactCreate schema fields.
-    
-    Args:
-        call_data: CallData object containing collected information
-        call_sid: Optional Twilio call SID for reference
-        
-    Returns:
-        dict: {"success": True/False, "error": error message if failed}
-        
-    Note:
-        - Requires CRM_BACKEND_URL and CRM_BACKEND_TOKEN environment variables
-        - Will not crash on failure, only logs errors
-        - Uses Bearer token authentication
+    Push contact/call data to the public CRM endpoint.
+
+    The new endpoint expects only contact basics plus the tenant code:
+    POST {base_url}/public/submit-contact
+    Body: {"name", "email", "phone", "tenant_code"}
     """
-    # Skip if CRM backend is not configured
-    if not CRM_BACKEND_URL or not CRM_BACKEND_TOKEN:
-        print("CRM backend not configured (CRM_BACKEND_URL or CRM_BACKEND_TOKEN missing), skipping push")
-        return {"success": False, "error": "CRM backend not configured"}
-    
+    if not CRM_BACKEND_URL:
+        print("CRM backend URL not configured (CRM_BACKEND_URL missing), skipping push")
+        return {"success": False, "error": "CRM backend URL not configured"}
+
     try:
-        # Construct the full endpoint URL
-        url = f"{CRM_BACKEND_URL.rstrip('/')}/contacts/"
-        
+        url = f"{CRM_BACKEND_URL.rstrip('/')}/public/submit-contact"
+
         headers = {
-            "Authorization": f"Bearer {CRM_BACKEND_TOKEN}",
             "Content-Type": "application/json"
         }
-        
-        # Map CallData fields to CRM ContactCreate schema
-        # Assuming CRM expects: name, phone, email, service, status, notes, appointment_time
+
+        # Minimal payload required by the public submit-contact endpoint
         payload = {
             "name": call_data.name or "Unknown",
-            "phone": call_data.phone or "",
             "email": call_data.email or "",
-            "service": call_data.service or "",
-            "status": call_data.status or "new",
-            "notes": call_data.notes or "",
+            "phone": call_data.phone or "",
+            "tenant_code": CRM_TENANT_CODE,
         }
-        
-        # Add optional fields
+
+        # Include extra context in optional notes field if accepted by backend
+        # but keep the primary contract minimal to avoid schema mismatches.
+        if call_data.notes:
+            payload["notes"] = call_data.notes
+        if call_sid:
+            payload["call_sid"] = call_sid
+        if call_data.service:
+            payload["service"] = call_data.service
+        if call_data.status:
+            payload["status"] = call_data.status
         if call_data.appointment_time:
             payload["appointment_time"] = call_data.appointment_time
-            
-        if call_sid:
-            # Include call SID in notes for reference
-            payload["notes"] = f"Call SID: {call_sid}\n{payload['notes']}"
-        
+
         print(f"Pushing to CRM backend: {url}")
-        
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()  # Raise exception for 4xx/5xx status codes
-            
-            print(f"✅ CRM backend: Contact created successfully")
+            response.raise_for_status()
+
+            print("CRM backend: Contact submitted successfully")
             result = response.json() if response.text else {}
             return {
                 "success": True,
-                "contact_id": result.get("id"),
                 "response": result
             }
-                
+
     except httpx.TimeoutException as e:
         error_msg = f"CRM backend request timeout: {str(e)}"
-        print(f"❌ {error_msg}")
+        print(error_msg)
         return {"success": False, "error": error_msg}
     except httpx.HTTPStatusError as e:
         error_detail = e.response.text
-        print(f"❌ CRM backend HTTP error: {e}")
+        print(f"CRM backend HTTP error: {e}")
         print(f"Response body: {error_detail}")
         return {"success": False, "error": error_detail}
     except Exception as e:
         error_msg = f"CRM backend error: {str(e)}"
-        print(f"❌ {error_msg}")
+        print(error_msg)
         import traceback
         traceback.print_exc()
         return {"success": False, "error": error_msg}

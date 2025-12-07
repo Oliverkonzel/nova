@@ -140,27 +140,24 @@ Add these variables to your `.env` file:
 
 ```bash
 # CRM Backend Integration (optional)
-CRM_BACKEND_URL=https://your-crm-backend-url
-CRM_BACKEND_TOKEN=your_crm_backend_api_token_here
+CRM_BACKEND_URL=https://crm-backend-8b97.onrender.com
+CRM_TENANT_CODE=walmart
 ```
 
 ### How it works
 
 At the end of each call, Nova automatically sends contact data to your CRM backend:
-- **Endpoint**: `POST {CRM_BACKEND_URL}/contacts/`
-- **Authentication**: Bearer token in Authorization header
-- **Payload**: JSON with collected call data
+- **Endpoint**: `POST {CRM_BACKEND_URL}/public/submit-contact`
+- **Authentication**: None (public endpoint)
+- **Payload**: Minimal JSON contract required by the public endpoint
 
 Example payload:
 ```json
 {
-  "name": "John Doe",
-  "phone": "+15551234567",
-  "email": "john@example.com",
-  "service": "AI Consultation",
-  "status": "booked",
-  "appointment_time": "2024-01-15T10:00:00",
-  "notes": "Call SID: CA123...\nInterested in automation solutions"
+  "name": "from nova",
+  "email": "from nova",
+  "phone": "from nova",
+  "tenant_code": "walmart"
 }
 ```
 

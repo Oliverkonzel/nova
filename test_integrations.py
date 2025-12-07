@@ -105,13 +105,14 @@ async def test_crm_backend():
 
         if result.get("success"):
             print(f"✅ SUCCESS: Contact pushed to CRM backend")
-            print(f"   Contact ID: {result.get('contact_id')}")
+            if result.get("response"):
+                print(f"   Response: {result['response']}")
             return True
         else:
             error = result.get('error', 'Unknown error')
             if "not configured" in error:
                 print(f"⚠️  SKIPPED: CRM backend not configured")
-                print("   Set CRM_BACKEND_URL and CRM_BACKEND_TOKEN in .env to test")
+                print("   Set CRM_BACKEND_URL and CRM_TENANT_CODE in .env to test")
                 return True  # Not a failure, just not configured
             else:
                 print(f"❌ FAILED: {error}")
