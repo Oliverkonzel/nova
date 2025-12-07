@@ -1,12 +1,12 @@
 """
-CRM Service - Integrates with Notion database
+CRM Service - Integrates with Notion database and CRM backend
 """
 import httpx
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL
+from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL, CRM_BACKEND_URL, CRM_BACKEND_TOKEN
 from models import CallData
 from datetime import datetime
 
@@ -85,3 +85,90 @@ async def create_lead(call_data: CallData, call_sid: str) -> dict:
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
+
+async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict:
+    """
+    Push contact/call data to CRM backend API.
+    
+    Posts to the CRM backend's /contacts/ endpoint with call data in JSON format.
+    Maps CallData fields to CRM ContactCreate schema fields.
+    
+    Args:
+        call_data: CallData object containing collected information
+        call_sid: Optional Twilio call SID for reference
+        
+    Returns:
+        dict: {"success": True/False, "error": error message if failed}
+        
+    Note:
+        - Requires CRM_BACKEND_URL and CRM_BACKEND_TOKEN environment variables
+        - Will not crash on failure, only logs errors
+        - Uses Bearer token authentication
+    """
+    # Skip if CRM backend is not configured
+    if not CRM_BACKEND_URL or not CRM_BACKEND_TOKEN:
+        print("CRM backend not configured (CRM_BACKEND_URL or CRM_BACKEND_TOKEN missing), skipping push")
+        return {"success": False, "error": "CRM backend not configured"}
+    
+    try:
+        # Construct the full endpoint URL
+        url = f"{CRM_BACKEND_URL.rstrip('/')}/contacts/"
+        
+        headers = {
+            "Authorization": f"Bearer {CRM_BACKEND_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        # Map CallData fields to CRM ContactCreate schema
+        # Assuming CRM expects: name, phone, email, service, status, notes, appointment_time
+        payload = {
+            "name": call_data.name or "Unknown",
+            "phone": call_data.phone or "",
+            "email": call_data.email or "",
+            "service": call_data.service or "",
+            "status": call_data.status,
+            "notes": call_data.notes or "",
+        }
+        
+        # Add optional fields
+        if call_data.appointment_time:
+            payload["appointment_time"] = call_data.appointment_time
+            
+        if call_sid:
+            # Include call SID in notes for reference
+            payload["notes"] = f"Call SID: {call_sid}\n{payload['notes']}"
+        
+        print(f"Pushing to CRM backend: {url}")
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            
+            if response.status_code in [200, 201]:
+                print(f"✅ CRM backend: Contact created successfully")
+                result = response.json() if response.text else {}
+                return {
+                    "success": True,
+                    "contact_id": result.get("id"),
+                    "response": result
+                }
+            else:
+                error_detail = response.text
+                print(f"❌ CRM backend API Error {response.status_code}:")
+                print(f"Response: {error_detail}")
+                return {"success": False, "error": f"HTTP {response.status_code}: {error_detail}"}
+                
+    except httpx.TimeoutException as e:
+        error_msg = f"CRM backend request timeout: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {"success": False, "error": error_msg}
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.text if hasattr(e, 'response') else str(e)
+        print(f"❌ CRM backend HTTP error: {e}")
+        print(f"Response body: {error_detail}")
+        return {"success": False, "error": error_detail}
+    except Exception as e:
+        error_msg = f"CRM backend error: {str(e)}"
+        print(f"❌ {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": error_msg}
