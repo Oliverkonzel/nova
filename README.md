@@ -136,7 +136,7 @@ Nova can automatically send call data to your external CRM backend at the end of
 
 ### Setup
 
-Add these variables to your `.env` file:
+Add this variable to your `.env` file:
 
 ```bash
 # CRM Backend Integration (optional)

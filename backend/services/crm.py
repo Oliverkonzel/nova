@@ -97,7 +97,6 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
     if not CRM_BACKEND_URL:
         print("CRM backend URL not configured (CRM_BACKEND_URL missing), skipping push")
         return {"success": False, "error": "CRM backend URL not configured"}
-
     try:
         url = f"{CRM_BACKEND_URL.rstrip('/')}/public/submit-contact"
 
