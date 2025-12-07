@@ -136,19 +136,18 @@ Nova can automatically send call data to your external CRM backend at the end of
 
 ### Setup
 
-Add these variables to your `.env` file:
+Add this variable to your `.env` file:
 
 ```bash
 # CRM Backend Integration (optional)
 CRM_BACKEND_URL=https://your-crm-backend-url
-CRM_BACKEND_TOKEN=your_crm_backend_api_token_here
 ```
 
 ### How it works
 
 At the end of each call, Nova automatically sends contact data to your CRM backend:
 - **Endpoint**: `POST {CRM_BACKEND_URL}/contacts/`
-- **Authentication**: Bearer token in Authorization header
+- **Authentication**: None required
 - **Payload**: JSON with collected call data
 
 Example payload:

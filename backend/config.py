@@ -27,7 +27,6 @@ NOTION_API_URL = "https://api.notion.com/v1"
 
 # CRM Backend Configuration
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL")
-CRM_BACKEND_TOKEN = os.getenv("CRM_BACKEND_TOKEN")
 
 # Server Configuration
 HOST = os.getenv("HOST", "0.0.0.0")

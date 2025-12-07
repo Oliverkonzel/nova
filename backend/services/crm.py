@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL, CRM_BACKEND_URL, CRM_BACKEND_TOKEN
+from config import NOTION_TOKEN, NOTION_DATABASE_ID, NOTION_API_URL, CRM_BACKEND_URL
 from models import CallData
 from datetime import datetime
 
@@ -101,13 +101,13 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
         dict: {"success": True/False, "error": error message if failed}
         
     Note:
-        - Requires CRM_BACKEND_URL and CRM_BACKEND_TOKEN environment variables
+        - Requires CRM_BACKEND_URL environment variable
         - Will not crash on failure, only logs errors
-        - Uses Bearer token authentication
+        - No authentication required
     """
     # Skip if CRM backend is not configured
-    if not CRM_BACKEND_URL or not CRM_BACKEND_TOKEN:
-        print("CRM backend not configured (CRM_BACKEND_URL or CRM_BACKEND_TOKEN missing), skipping push")
+    if not CRM_BACKEND_URL:
+        print("CRM backend not configured (CRM_BACKEND_URL missing), skipping push")
         return {"success": False, "error": "CRM backend not configured"}
     
     try:
@@ -115,7 +115,6 @@ async def push_to_crm_backend(call_data: CallData, call_sid: str = None) -> dict
         url = f"{CRM_BACKEND_URL.rstrip('/')}/contacts/"
         
         headers = {
-            "Authorization": f"Bearer {CRM_BACKEND_TOKEN}",
             "Content-Type": "application/json"
         }
         
